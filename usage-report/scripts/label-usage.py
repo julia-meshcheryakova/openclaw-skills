@@ -116,17 +116,17 @@ def load_category_map() -> tuple[dict, list]:
     return _parse_map(base_map)
 
 
-KEYWORD_RULES = {
-    'finance': ['tax', 'isa', 'sipp', 'pension', 'investment', 'bank', 'money', 'bill', 'payment', 'donation', 'capital', 'income', 'salary'],
-    'health': ['physio', 'exercise', 'run', 'marathon', 'therapy', 'therapist', 'injury', 'doctor', 'medical', 'massage', 'yoga', 'gym'],
-    'learning': ['course', 'lecture', 'homework', 'academy', 'study', 'research', 'class', 'module', 'lesson', 'tutorial'],
-    'config': ['openclaw', 'bot', 'setup', 'config', 'debug', 'gateway', 'system', 'cron', 'script', 'pipeline', 'automation', 'infrastructure'],
-    'side-projects': ['personal project', 'prototype', 'app development', 'open source', 'startup'],
-    'social': ['friend', 'chat', 'call', 'family', 'greet', 'conversation', 'group chat'],
-    'personal': ['trip', 'travel', 'birthday', 'home', 'routine', 'daily', 'reflection', 'notes', 'visa', 'immigration'],
-    'creative': ['idea', 'brainstorm', 'design', 'art', 'game', 'creative', 'writing', 'music'],
-    'work': ['customer', 'workshop', 'presentation', 'linkedin', 'career', 'interview', 'project', 'meeting'],
-}
+def _build_keyword_rules(subcat_map: dict, categories: list) -> dict:
+    """Derive keyword rules from the category map itself (no hardcoded duplicates)."""
+    rules = {}
+    for subcat, cat in subcat_map.items():
+        if cat not in rules:
+            rules[cat] = []
+        # Add each word from the subcategory as a keyword
+        for word in subcat.split():
+            if len(word) > 2 and word not in rules[cat]:
+                rules[cat].append(word)
+    return rules
 
 
 def resolve_category(subcategory: str, subcat_map: dict, categories: list) -> tuple[str, bool, bool]:
@@ -144,7 +144,8 @@ def resolve_category(subcategory: str, subcat_map: dict, categories: list) -> tu
             return cat, True, False
     if sub_lower in categories:
         return sub_lower, False, True
-    for cat, keywords in KEYWORD_RULES.items():
+    keyword_rules = _build_keyword_rules(subcat_map, categories)
+    for cat, keywords in keyword_rules.items():
         if any(kw in sub_lower for kw in keywords):
             _auto_add_to_map(subcategory, cat)
             return cat, False, True
