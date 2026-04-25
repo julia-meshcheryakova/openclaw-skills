@@ -116,15 +116,31 @@ def load_category_map() -> tuple[dict, list]:
     return _parse_map(base_map)
 
 
+# Common words to exclude from auto-derived keyword rules
+_STOP_WORDS = {
+    'the', 'and', 'for', 'with', 'from', 'into', 'that', 'this',
+    'are', 'was', 'were', 'been', 'have', 'has', 'had', 'not',
+    'but', 'all', 'can', 'her', 'his', 'how', 'its', 'may',
+    'new', 'now', 'old', 'our', 'out', 'own', 'say', 'she',
+    'too', 'use', 'way', 'who', 'did', 'get', 'let', 'put',
+    'set', 'try', 'ask', 'own', 'any', 'day', 'got', 'him',
+    'man', 'run', 'see', 'top', 'two', 'yet',
+}
+
+
 def _build_keyword_rules(subcat_map: dict, categories: list) -> dict:
-    """Derive keyword rules from the category map itself (no hardcoded duplicates)."""
+    """Derive keyword rules from the category map (no hardcoded duplicates).
+    Uses full subcategory phrases + individual words (filtered for quality)."""
     rules = {}
     for subcat, cat in subcat_map.items():
         if cat not in rules:
             rules[cat] = []
-        # Add each word from the subcategory as a keyword
+        # Add full subcategory phrase as a keyword (best match)
+        if subcat not in rules[cat]:
+            rules[cat].append(subcat)
+        # Add individual words (min 4 chars, not stop words)
         for word in subcat.split():
-            if len(word) > 2 and word not in rules[cat]:
+            if len(word) >= 4 and word not in _STOP_WORDS and word not in rules[cat]:
                 rules[cat].append(word)
     return rules
 
