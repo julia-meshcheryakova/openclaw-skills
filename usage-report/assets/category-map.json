@@ -1,0 +1,93 @@
+{
+  "_comment": "category → list of subcategories. Add your own subcategories under each category. The labeling script flattens this for lookup.",
+  "work": [
+    "career planning",
+    "linkedin post",
+    "job search",
+    "interview prep",
+    "performance review",
+    "team meeting",
+    "presentation prep",
+    "project planning"
+  ],
+  "health/sport": [
+    "exercise",
+    "running",
+    "gym",
+    "physio",
+    "therapy",
+    "doctor",
+    "mental health",
+    "meditation",
+    "sleep tracking"
+  ],
+  "learning": [
+    "online course",
+    "homework",
+    "reading",
+    "research",
+    "tutorial",
+    "study session",
+    "language learning"
+  ],
+  "personal": [
+    "trip planning",
+    "travel",
+    "calendar management",
+    "life admin",
+    "home",
+    "errands",
+    "reflection",
+    "journaling",
+    "visa",
+    "immigration"
+  ],
+  "finance": [
+    "tax",
+    "isa",
+    "sipp",
+    "pension",
+    "investments",
+    "bills",
+    "budgeting",
+    "bank",
+    "crypto",
+    "donations"
+  ],
+  "config": [
+    "openclaw setup",
+    "bot setup",
+    "cron jobs",
+    "automation",
+    "debugging",
+    "infrastructure",
+    "system config",
+    "scripts",
+    "api setup"
+  ],
+  "creative": [
+    "creative lab",
+    "ideation",
+    "writing",
+    "art",
+    "music",
+    "game design",
+    "brainstorming",
+    "design"
+  ],
+  "social": [
+    "chatting with friends",
+    "group chat",
+    "family",
+    "social media",
+    "networking",
+    "casual conversation"
+  ],
+  "side-projects": [
+    "personal project",
+    "startup idea",
+    "prototype",
+    "app development",
+    "open source"
+  ]
+}
