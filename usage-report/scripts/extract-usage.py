@@ -20,7 +20,9 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 GAP_MINUTES = 5
-LONDON = ZoneInfo("Europe/London")
+
+# User timezone — override via OPENCLAW_TZ env var (default: UTC)
+USER_TZ = ZoneInfo(os.environ.get("OPENCLAW_TZ", "UTC"))
 
 
 # ─── Path resolution ─────────────────────────────────────────────────────────
@@ -55,29 +57,28 @@ def parse_iso(ts: str) -> datetime:
     return datetime.fromisoformat(ts)
 
 
-def to_london(dt: datetime) -> datetime:
-    return dt.astimezone(LONDON)
+def to_local(dt: datetime) -> datetime:
+    return dt.astimezone(USER_TZ)
 
 
 def strip_snippet(text: str) -> str:
-    text = re.sub(r"^\[Telegram[^\]]*UTC\]\s*", "", text)
+    """Strip OpenClaw envelope metadata from user messages (provider-agnostic)."""
+    # Remove untrusted metadata blocks (Conversation info, Sender, Replied, Forwarded)
     text = re.sub(
-        r"Conversation info \(untrusted metadata\):\s*```json\s*?\{.*?\}\s*?```\s*",
+        r"(?:Conversation info|Sender|Replied message|Forwarded message context)"
+        r"\s*\(untrusted[^)]*\):\s*```json\s*?\{.*?\}\s*?```\s*",
         "", text, flags=re.DOTALL,
     )
-    text = re.sub(
-        r"Sender \(untrusted metadata\):\s*```json\s*?\{.*?\}\s*?```\s*",
-        "", text, flags=re.DOTALL,
-    )
-    text = re.sub(r"Replied message \(untrusted.*?```\s*", "", text, flags=re.DOTALL)
-    text = re.sub(r"Forwarded message context \(untrusted.*?```\s*", "", text, flags=re.DOTALL)
+    # Remove channel-prefixed timestamps: [Telegram ...], [Discord ...], [Signal ...], etc.
+    text = re.sub(r"(?:^|\n)\[(?:Telegram|Discord|Signal|Slack|WhatsApp|IRC|Matrix|Teams)[^\]]*\]\s*", "\n", text)
+    # Remove common envelope labels
     text = re.sub(r"(?:^|\n)User text:\s*\n?", "\n", text)
-    text = re.sub(r"(?:^|\n)\[Telegram[^\]]*UTC\]\s*", "\n", text)
     text = re.sub(r"(?:^|\n)Transcript:\s*\n?", "\n", text)
     text = re.sub(r"(?:^|\n)\[Audio\]\s*\n?", "\n", text)
     text = re.sub(r"(?:^|\n)\[[^\]]{0,80}\]\s*", "\n", text)
     text = re.sub(r"^\[media attached:.*?\]\s*", "", text)
     text = re.sub(r"^System:\s*", "", text)
+    # Remove leading JSON code blocks (metadata)
     text = re.sub(r"^```(?:json)?\s*\{[^}]*\}\s*```\s*", "", text, flags=re.DOTALL)
     return text.strip()
 
@@ -139,8 +140,8 @@ def _make_block(session_id, msgs, start, end, user_texts):
         return None
     return {
         "session_id": session_id,
-        "start": to_london(start).isoformat(),
-        "end": to_london(end).isoformat(),
+        "start": to_local(start).isoformat(),
+        "end": to_local(end).isoformat(),
         "span_minutes": span_minutes,
         "attention_minutes": attention_minutes,
         "message_count": len(msgs),
@@ -183,7 +184,7 @@ def cluster_blocks(session_id: str, messages: list) -> list:
     return blocks
 
 
-def process_session_file(path: Path, target_date_london: str):
+def process_session_file(path: Path, target_date_local: str):
     messages = []
     session_id = path.stem
     if '.checkpoint.' in path.name:
@@ -219,8 +220,8 @@ def process_session_file(path: Path, target_date_london: str):
                 else:
                     continue
 
-            dt_london = to_london(dt_utc)
-            if dt_london.strftime("%Y-%m-%d") != target_date_london:
+            dt_local = to_local(dt_utc)
+            if dt_local.strftime("%Y-%m-%d") != target_date_local:
                 continue
 
             content = msg.get("content", "")
@@ -309,7 +310,7 @@ def get_all_dates() -> list:
                     if ts_str:
                         try:
                             dt_utc = parse_iso(ts_str)
-                            dates.add(to_london(dt_utc).strftime("%Y-%m-%d"))
+                            dates.add(to_local(dt_utc).strftime("%Y-%m-%d"))
                         except ValueError:
                             pass
     return sorted(dates)
@@ -332,7 +333,7 @@ def main():
                 print(f"Error: invalid date '{date_str}', expected YYYY-MM-DD")
                 sys.exit(1)
         else:
-            yesterday = datetime.now(LONDON) - timedelta(days=1)
+            yesterday = datetime.now(USER_TZ) - timedelta(days=1)
             date_str = yesterday.strftime("%Y-%m-%d")
         process_date(date_str)
 

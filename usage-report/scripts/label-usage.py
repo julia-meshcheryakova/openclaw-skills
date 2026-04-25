@@ -24,7 +24,7 @@ from zoneinfo import ZoneInfo
 import urllib.request
 import urllib.error
 
-LONDON = ZoneInfo("Europe/London")
+USER_TZ = ZoneInfo(os.environ.get("OPENCLAW_TZ", "UTC"))
 BATCH_SIZE = 30
 
 
@@ -418,7 +418,7 @@ def main():
         if args:
             date_str = args[0]
         else:
-            yesterday = datetime.now(LONDON) - timedelta(days=1)
+            yesterday = datetime.now(USER_TZ) - timedelta(days=1)
             date_str = yesterday.strftime("%Y-%m-%d")
         label_date(date_str, cfg)
 

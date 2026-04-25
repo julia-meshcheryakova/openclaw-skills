@@ -148,3 +148,13 @@ Install dependencies:
 ```bash
 pip install matplotlib numpy
 ```
+
+## Configuration
+
+### Timezone
+
+Set `OPENCLAW_TZ` to your IANA timezone (default: `UTC`):
+
+```bash
+export OPENCLAW_TZ=Europe/London  # or America/New_York, Asia/Tokyo, etc.
+```
