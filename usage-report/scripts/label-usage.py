@@ -214,7 +214,7 @@ def call_llm(prompt: str, cfg: dict) -> str:
     token = cfg.get("apiKey", "")
     if not token:
         print("Error: no API key configured. Set GITHUB_TOKEN or configure data/usage/config.json", file=sys.stderr)
-        sys.exit(1)
+        return ""  # graceful degradation for cron
 
     base_url = cfg.get("baseUrl", "https://api.githubcopilot.com").rstrip("/")
     model = cfg.get("model", "claude-sonnet-4")
@@ -238,14 +238,29 @@ def call_llm(prompt: str, cfg: dict) -> str:
 
     req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
 
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            return data["choices"][0]["message"]["content"]
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", errors="replace")
-        print(f"API error {e.code}: {body}", file=sys.stderr)
-        sys.exit(1)
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                return data["choices"][0]["message"]["content"]
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", errors="replace")
+            print(f"API error {e.code} (attempt {attempt+1}/{max_retries}): {body[:200]}", file=sys.stderr)
+            if attempt < max_retries - 1:
+                import time
+                time.sleep(5 * (attempt + 1))
+                req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+            else:
+                return ""
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            print(f"Network error (attempt {attempt+1}/{max_retries}): {e}", file=sys.stderr)
+            if attempt < max_retries - 1:
+                import time
+                time.sleep(5 * (attempt + 1))
+                req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+            else:
+                return ""
 
 
 # ─── Prompting ────────────────────────────────────────────────────────────────

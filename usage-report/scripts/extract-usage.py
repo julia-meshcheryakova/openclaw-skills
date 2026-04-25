@@ -96,18 +96,37 @@ def extract_text(content) -> str:
 
 
 def is_skippable_session(messages: list) -> bool:
+    """Check if session is a cron/heartbeat/subagent session.
+
+    Skips compaction summaries before checking keywords — long-running
+    sessions with compaction have summaries containing 'heartbeat', 'cron'
+    etc. as context description, not as actual session triggers.
+    """
+    compaction_markers = (
+        "context limit exceeded",
+        "compacted into the following summary",
+        "the conversation history before this point was compacted",
+        "i've reset our conversation",
+    )
+
+    checked = 0
     for role, text, _ in messages:
         if role == "user":
             lower = text[:500].lower()
+            # Skip compaction summary messages
+            if any(marker in lower for marker in compaction_markers):
+                continue
             if any(kw in lower for kw in (
                 "[subagent", "subagent context", "you are a subagent",
                 "[subagent task]",
-                "[cron:", "heartbeat", "read heartbeat.md",
+                "[cron:",
                 "nightly-workspace-review", "nightly workspace review",
                 "weekly-optimization", "consolidation",
             )):
                 return True
-            break
+            checked += 1
+            if checked >= 5:
+                break
     return False
 
 
