@@ -253,7 +253,8 @@ def get_daily_notes(date_str: str) -> str:
     return ""
 
 
-def build_prompt(date_str: str, blocks: list, daily_notes: str, categories: list) -> str:
+def build_prompt(date_str: str, blocks: list, daily_notes: str, categories: list, subcat_map: dict = None) -> str:
+    subcat_map = subcat_map or {}
     blocks_summary = []
     for i, b in enumerate(blocks):
         start = b["start"][11:16] if "T" in b["start"] else b["start"]
@@ -282,10 +283,18 @@ Daily notes for context:
 {daily_notes}
 """
 
+    # Build subcategory examples per category for the prompt
+    subcat_examples = []
+    for cat in categories:
+        subs = [k for k, v in subcat_map.items() if v == cat]
+        if subs:
+            subcat_examples.append(f"  {cat}: {', '.join(subs[:6])}")
+    subcat_hint = "\n".join(subcat_examples) if subcat_examples else ""
+
     prompt += f"""
 For each block, return a JSON array with one object per block:
 [
-  {{"block": 1, "topic": "short label", "subcategory": "specific area", "value": 7}},
+  {{"block": 1, "topic": "short label", "category": "work", "subcategory": "career planning", "value": 7}},
   ...
 ]
 
@@ -294,10 +303,11 @@ Rules:
   BAD: "Telegram message processing", "Evening session", "system state check"
   GOOD: "Job interview prep", "ISA rates research", "Copilot CLI setup", "Trip planning"
   Focus on the SUBJECT MATTER, not the channel or time of day.
-- "subcategory" = a specific area/project name. Examples:
-  openclaw setup, career planning, tax, running, online course, trip planning,
-  linkedin post, chatting with friends, personal project, etc.
-  Be specific — use project/domain names when applicable.
+- "category" = MUST be one of: {categories_text}
+  Pick the best fit. Never invent new categories.
+- "subcategory" = a GENERIC area within the category. Reuse existing ones when possible:
+{subcat_hint}
+  If none fit, pick a short generic label (2-3 words). Don't use the specific topic as subcategory.
 - "value" = 1-10 how valuable/impactful this block was (10 = high impact, 1 = trivial/noise)
 - If snippet is empty or unclear, use context from daily notes or mark topic as "unclear"
 - Return ONLY the JSON array, no other text
@@ -326,7 +336,14 @@ def parse_labels(response: str, block_count: int, subcat_map: dict, categories: 
         if i < len(labels):
             label = labels[i]
             subcategory = label.get("subcategory", "unknown")
-            category, is_known, auto_resolved = resolve_category(subcategory, subcat_map, categories)
+            # Prefer LLM-provided category; fall back to resolve if missing
+            llm_cat = label.get("category", "").lower().strip()
+            if llm_cat in categories:
+                category = llm_cat
+                is_known = True
+                auto_resolved = False
+            else:
+                category, is_known, auto_resolved = resolve_category(subcategory, subcat_map, categories)
             result.append({
                 "topic": label.get("topic", "unknown"),
                 "subcategory": subcategory,
@@ -346,7 +363,7 @@ def label_blocks_batched(blocks: list, date_str: str, daily_notes: str,
     all_labels = []
     for i in range(0, len(blocks), BATCH_SIZE):
         batch = blocks[i:i + BATCH_SIZE]
-        prompt = build_prompt(date_str, batch, daily_notes if i == 0 else "", categories)
+        prompt = build_prompt(date_str, batch, daily_notes if i == 0 else "", categories, subcat_map)
         response = call_llm(prompt, cfg)
         if response is None:
             # Transient failure: skip this batch with placeholders, continue.
