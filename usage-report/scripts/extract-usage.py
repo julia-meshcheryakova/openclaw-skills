@@ -273,6 +273,17 @@ def process_date(date_str: str):
         "blocks": all_blocks,
     }
 
+    # Safeguard: don't overwrite if existing file has more blocks (compacted sessions lose data)
+    if out_path.exists():
+        try:
+            existing = json.loads(out_path.read_text())
+            existing_blocks = len(existing.get("blocks", []))
+            if existing_blocks > len(all_blocks):
+                print(f"  ⚠ Keeping existing {out_path.name} ({existing_blocks} blocks > {len(all_blocks)} new)")
+                return
+        except (json.JSONDecodeError, OSError):
+            pass
+
     with open(out_path, "w", encoding="utf-8") as fh:
         json.dump(summary, fh, indent=2, ensure_ascii=False)
 
