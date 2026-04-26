@@ -579,8 +579,9 @@ def chart_timeline(all_rows):
         bottoms += vals
 
     rolling = np.convolve(totals, np.ones(7)/7, mode='same')
-    ax.plot(xs, rolling, color='#aaaaaa', linestyle='--', linewidth=1.5,
-            label='7-day avg', zorder=5)
+    if len(xs) >= 7:
+        ax.plot(xs, rolling, color='#aaaaaa', linestyle='--', linewidth=1.5,
+                label='7-day avg', zorder=5)
 
     ax.set_xticks(xs)
     x_labels = []
