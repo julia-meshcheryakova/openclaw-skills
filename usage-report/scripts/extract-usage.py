@@ -15,6 +15,7 @@ import json
 import os
 import re
 import sys
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -101,11 +102,14 @@ def is_skippable_session(messages: list) -> bool:
 
 
 def _is_noise_message(text: str) -> bool:
-    lower = text[:200].lower()
+    lower = text[:200].lower().strip()
+    if lower in ("heartbeat_ok", "no_reply"):
+        return True
     return any(kw in lower for kw in (
         "<<<begin_openclaw_internal_context>>>",
         "[system] your previous turn",
         "[inter-session message]",
+        "pre-compaction memory flush",
     ))
 
 
@@ -221,6 +225,11 @@ def process_session_file(path: Path, target_date_local: str):
         return None
     if is_skippable_session(messages):
         return None
+    # Filter compaction dumps: >20 messages in same minute = compaction, not real activity
+    minute_counts = Counter(dt.strftime("%Y%m%d%H%M") for _, _, dt in messages)
+    compaction_minutes = {m for m, c in minute_counts.items() if c > 20}
+    if compaction_minutes:
+        messages = [(r, t, d) for r, t, d in messages if d.strftime("%Y%m%d%H%M") not in compaction_minutes]
     user_msgs = [m for m in messages if m[0] == "user"]
     if not user_msgs:
         return None
