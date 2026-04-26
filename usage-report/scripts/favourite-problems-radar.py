@@ -15,7 +15,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 WORKSPACE = Path(os.environ.get("OPENCLAW_WORKSPACE", Path.home() / ".openclaw" / "workspace"))
-LABELED_DIR = WORKSPACE / "data" / "usage" / "labeled"
+ANALYZED_DIR = WORKSPACE / "data" / "usage" / "analyzed"
+LABELED_DIR = WORKSPACE / "data" / "usage" / "labeled"  # fallback
 PROBLEMS_FILE = WORKSPACE / "knowledge" / "favourite-problems.md"
 OUTPUT = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("/tmp/favourite-problems-radar.png")
 
@@ -72,15 +73,30 @@ def main():
     # Load all labeled data
     problem_minutes = defaultdict(float)
     total_minutes = 0
+    seen_dates = set()
 
-    for f in sorted(LABELED_DIR.glob("*.json")):
-        with open(f) as fh:
-            data = json.load(fh)
-        for cat, mins in data.get("category_minutes", {}).items():
-            idx = CAT_TO_PROBLEM_IDX.get(cat, 0)
-            if idx < N:
-                problem_minutes[idx] += mins
-            total_minutes += mins
+    # Try new analyzed format first, fall back to old labeled
+    for source_dir in [ANALYZED_DIR, LABELED_DIR]:
+        for f in sorted(source_dir.glob("*.json")):
+            if f.stem in seen_dates:
+                continue
+            seen_dates.add(f.stem)
+            with open(f) as fh:
+                data = json.load(fh)
+            # New format: categories as percentages
+            if "categories" in data:
+                for cat, pct in data["categories"].items():
+                    idx = CAT_TO_PROBLEM_IDX.get(cat, 0)
+                    if idx < N:
+                        problem_minutes[idx] += pct
+                    total_minutes += pct
+            # Old format: category_minutes
+            elif "category_minutes" in data:
+                for cat, mins in data["category_minutes"].items():
+                    idx = CAT_TO_PROBLEM_IDX.get(cat, 0)
+                    if idx < N:
+                        problem_minutes[idx] += mins
+                    total_minutes += mins
 
     if total_minutes == 0:
         print("No labeled data found")
