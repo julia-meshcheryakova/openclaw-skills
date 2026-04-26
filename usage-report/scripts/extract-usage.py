@@ -86,7 +86,7 @@ def extract_text(content) -> str:
 
 
 def is_skippable_session(messages: list) -> bool:
-    for role, text, _ in messages:
+    for role, text, _, *_ in messages:
         if role == "user":
             lower = text[:500].lower()
             if any(kw in lower for kw in (
@@ -138,6 +138,7 @@ def _make_block(session_id, msgs, start, end, user_texts):
         "span_minutes": span_minutes,
         "attention_minutes": attention_minutes,
         "message_count": len(msgs),
+        "total_tokens": sum(m[3] if len(m) > 3 else 0 for m in msgs),
         "snippet": snippet,
     }
 
@@ -155,7 +156,7 @@ def cluster_blocks(session_id: str, messages: list) -> list:
         user_texts.append(messages[0][1])
 
     for msg in messages[1:]:
-        role, text, dt = msg
+        role, text, dt = msg[0], msg[1], msg[2]
         gap = (dt - block_end).total_seconds() / 60
         if gap < GAP_MINUTES:
             block_msgs.append(msg)
@@ -219,17 +220,19 @@ def process_session_file(path: Path, target_date_local: str):
 
             content = msg.get("content", "")
             text = extract_text(content)
-            messages.append((role, text, dt_utc))
+            usage = msg.get("usage", {})
+            tokens = usage.get("totalTokens", 0)
+            messages.append((role, text, dt_utc, tokens))
 
     if not messages:
         return None
     if is_skippable_session(messages):
         return None
     # Filter compaction dumps: >20 messages in same minute = compaction, not real activity
-    minute_counts = Counter(dt.strftime("%Y%m%d%H%M") for _, _, dt in messages)
+    minute_counts = Counter(m[2].strftime("%Y%m%d%H%M") for m in messages)
     compaction_minutes = {m for m, c in minute_counts.items() if c > 20}
     if compaction_minutes:
-        messages = [(r, t, d) for r, t, d in messages if d.strftime("%Y%m%d%H%M") not in compaction_minutes]
+        messages = [m for m in messages if m[2].strftime("%Y%m%d%H%M") not in compaction_minutes]
     user_msgs = [m for m in messages if m[0] == "user"]
     if not user_msgs:
         return None
@@ -253,6 +256,7 @@ def process_date(date_str: str):
     all_blocks.sort(key=lambda b: b["start"])
 
     total_messages = sum(b["message_count"] for b in all_blocks)
+    total_tokens = sum(b.get("total_tokens", 0) for b in all_blocks)
     total_span = round(sum(b["span_minutes"] for b in all_blocks), 1)
     total_attention = round(sum(b["attention_minutes"] for b in all_blocks), 1)
 
@@ -268,6 +272,7 @@ def process_date(date_str: str):
         "total_span_minutes": total_span,
         "total_attention_minutes": total_attention,
         "total_messages": total_messages,
+        "total_tokens": total_tokens,
         "block_count": len(all_blocks),
         "span_hours": span_hours,
         "blocks": all_blocks,

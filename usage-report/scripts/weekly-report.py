@@ -100,6 +100,7 @@ def load_day(d: date) -> list[dict]:
                 'subcategory': b.get('subcategory', b.get('topic', 'unknown')),
                 'category': b.get('category', 'personal'),
                 'duration_est_min': b.get('attention_minutes', b.get('active_minutes', b.get('span_minutes', 0))),
+                'total_tokens': b.get('total_tokens', 0),
                 'value': b.get('value', 5),
             }
             rows.append(row)
@@ -616,6 +617,80 @@ def chart_category_trends(all_rows):
     save(fig, out)
 
 
+# ─── Chart 7: Token usage timeline (all-time) ─────────────────────────────────
+
+def chart_tokens(all_rows):
+    if not all_rows:
+        return
+
+    dates = sorted(set(r['_date'] for r in all_rows))
+    d_min, d_max = dates[0], dates[-1]
+    all_days = []
+    cur = d_min
+    while cur <= d_max:
+        all_days.append(cur)
+        cur += timedelta(days=1)
+
+    day_tokens = {d: defaultdict(int) for d in all_days}
+    day_total = {d: 0 for d in all_days}
+    for r in all_rows:
+        d = r['_date']
+        cat = r.get('category', 'admin')
+        tokens = r.get('total_tokens', 0)
+        day_tokens[d][cat] += tokens
+        day_total[d] += tokens
+
+    # Skip if no token data at all
+    if sum(day_total.values()) == 0:
+        print('  ⚠ No token data available')
+        return
+
+    xs = np.arange(len(all_days))
+    totals = np.array([day_total[d] / 1_000_000 for d in all_days])  # in millions
+
+    fig, ax = plt.subplots(figsize=(14, 5))
+    apply_dark(fig, ax)
+
+    bottoms = np.zeros(len(all_days))
+    for cat in STACK_ORDER:
+        vals = np.array([day_tokens[d].get(cat, 0) / 1_000_000 for d in all_days])
+        if vals.sum() == 0:
+            continue
+        ax.bar(xs, vals, bottom=bottoms, color=CATEGORY_COLORS[cat],
+               label=cat, width=0.8, zorder=3)
+        bottoms += vals
+
+    rolling = np.convolve(totals, np.ones(7)/7, mode='same')
+    ax.plot(xs, rolling, color='#aaaaaa', linestyle='--', linewidth=1.5,
+            label='7-day avg', zorder=5)
+
+    ax.set_xticks(xs)
+    x_labels = []
+    for d in all_days:
+        label = d.strftime('%-d')
+        if d.weekday() >= 5:
+            label = d.strftime('%-d %b')
+        x_labels.append(label)
+    ax.set_xticklabels(x_labels, rotation=90, ha='center', color=TEXT, fontsize=7)
+    for i, d in enumerate(all_days):
+        if d.weekday() >= 5:
+            ax.get_xticklabels()[i].set_fontweight('bold')
+            ax.get_xticklabels()[i].set_color(ACCENT)
+    for i, d in enumerate(all_days):
+        if d.weekday() == 0 and i > 0:
+            ax.axvline(i - 0.5, color=MUTED, linewidth=0.5, linestyle=':', alpha=0.5, zorder=1)
+
+    ax.set_ylabel('Tokens (millions)', color=TEXT)
+    ax.set_title('Daily Token Usage (All Time)', color=TEXT, fontsize=14, fontweight='bold', pad=12)
+    legend = ax.legend(loc='upper left', framealpha=0.2, facecolor=PANEL,
+                       labelcolor=TEXT, fontsize=8)
+    legend.get_frame().set_edgecolor(MUTED)
+    apply_dark(fig, ax)
+
+    out = ALLTIME_DIR / 'tokens.png'
+    save(fig, out)
+
+
 # ─── Text summary ─────────────────────────────────────────────────────────────
 
 def print_summary(rows, week_start: date, prev_rows):
@@ -631,6 +706,9 @@ def print_summary(rows, week_start: date, prev_rows):
 
     print(f'\n📊 Weekly Report — {ws_label} – {we_label}')
     print(f'\n**{total_h:.1f}h total** · {avg_h:.1f}h/day avg · {len(rows)} events')
+    total_tokens = sum(r.get('total_tokens', 0) for r in rows)
+    if total_tokens > 0:
+        print(f'**{total_tokens/1_000_000:.1f}M tokens** this week')
     print('\n**Where time went:**')
     for cat, h in sorted(ch.items(), key=lambda x: -x[1]):
         if h < 0.01:
@@ -696,6 +774,7 @@ def main():
     print('\nGenerating all-time charts...')
     chart_timeline(all_rows)
     chart_category_trends(all_rows)
+    chart_tokens(all_rows)
 
     print_summary(rows, ws, prev_rows)
 
