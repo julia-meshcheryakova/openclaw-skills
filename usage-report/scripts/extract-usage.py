@@ -25,18 +25,7 @@ GAP_MINUTES = 5
 USER_TZ = ZoneInfo(os.environ.get("OPENCLAW_TZ", "UTC"))
 
 
-# ─── Path resolution ─────────────────────────────────────────────────────────
-
-def find_workspace() -> Path:
-    """Resolve workspace directory from env var or auto-detect."""
-    env = os.environ.get("OPENCLAW_WORKSPACE")
-    if env:
-        return Path(env)
-    base = Path.home() / ".openclaw"
-    candidates = [p for p in base.iterdir() if p.is_dir() and p.name.startswith("workspace")]
-    if candidates:
-        return sorted(candidates)[0]
-    return base / "workspace"
+from util import find_workspace
 
 
 def find_sessions_dirs() -> list:

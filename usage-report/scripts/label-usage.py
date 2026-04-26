@@ -16,7 +16,6 @@ Falls back to GITHUB_TOKEN with Copilot if no config found.
 
 import json
 import os
-import re
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -28,17 +27,7 @@ USER_TZ = ZoneInfo(os.environ.get("OPENCLAW_TZ", "UTC"))
 BATCH_SIZE = 30
 
 
-# ─── Path resolution ─────────────────────────────────────────────────────────
-
-def find_workspace() -> Path:
-    env = os.environ.get("OPENCLAW_WORKSPACE")
-    if env:
-        return Path(env)
-    base = Path.home() / ".openclaw"
-    candidates = [p for p in base.iterdir() if p.is_dir() and p.name.startswith("workspace")]
-    if candidates:
-        return sorted(candidates)[0]
-    return base / "workspace"
+from util import find_workspace
 
 
 WORKSPACE = find_workspace()
@@ -156,7 +145,9 @@ def resolve_category(subcategory: str, subcat_map: dict, categories: list) -> tu
     sub_words = set(sub_lower.split())
     for key, cat in subcat_map.items():
         key_words = set(key.split())
-        if len(sub_words & key_words) >= 1 and len(key_words) <= 3:
+        # Require >= 2 shared words to avoid spurious matches like
+        # "tax planning" ↔ "trip planning" sharing only "planning".
+        if len(sub_words & key_words) >= 2:
             return cat, True, False
     if sub_lower in categories:
         return sub_lower, False, True
@@ -242,10 +233,15 @@ def call_llm(prompt: str, cfg: dict) -> str:
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             return data["choices"][0]["message"]["content"]
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", errors="replace")
-        print(f"API error {e.code}: {body}", file=sys.stderr)
-        sys.exit(1)
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as e:
+        # Transient API failures: log and let the caller skip this batch.
+        body = ""
+        if isinstance(e, urllib.error.HTTPError):
+            body = e.read().decode("utf-8", errors="replace")
+            print(f"  ⚠ LLM API error {e.code}: {body[:200]}", file=sys.stderr)
+        else:
+            print(f"  ⚠ LLM call failed: {e}", file=sys.stderr)
+        return None
 
 
 # ─── Prompting ────────────────────────────────────────────────────────────────
@@ -310,15 +306,19 @@ Rules:
 
 
 def parse_labels(response: str, block_count: int, subcat_map: dict, categories: list) -> list:
-    match = re.search(r"\[.*\]", response, re.DOTALL)
-    if not match:
+    # Bracket-balanced extraction: find first '[' and last ']' to handle prose
+    # around the JSON. Greedy regex fails on multi-bracket responses.
+    start = response.find('[')
+    end = response.rfind(']')
+    if start == -1 or end == -1 or end < start:
         print(f"Warning: could not parse LLM response:\n{response}", file=sys.stderr)
         return [{"topic": "unknown", "subcategory": "unknown", "category": "unknown", "value": 5}] * block_count
 
+    json_text = response[start:end + 1]
     try:
-        labels = json.loads(match.group())
+        labels = json.loads(json_text)
     except json.JSONDecodeError:
-        print(f"Warning: invalid JSON in LLM response:\n{match.group()}", file=sys.stderr)
+        print(f"Warning: invalid JSON in LLM response:\n{json_text}", file=sys.stderr)
         return [{"topic": "unknown", "subcategory": "unknown", "category": "unknown", "value": 5}] * block_count
 
     result = []
@@ -348,6 +348,15 @@ def label_blocks_batched(blocks: list, date_str: str, daily_notes: str,
         batch = blocks[i:i + BATCH_SIZE]
         prompt = build_prompt(date_str, batch, daily_notes if i == 0 else "", categories)
         response = call_llm(prompt, cfg)
+        if response is None:
+            # Transient failure: skip this batch with placeholders, continue.
+            print(f"  ⚠ Skipping batch {i // BATCH_SIZE + 1} after API error", file=sys.stderr)
+            all_labels.extend(
+                [{"topic": "unknown", "subcategory": "unknown", "category": "unknown",
+                  "category_known": False, "auto_resolved": False, "value": 5}]
+                * len(batch)
+            )
+            continue
         labels = parse_labels(response, len(batch), subcat_map, categories)
         all_labels.extend(labels)
     return all_labels

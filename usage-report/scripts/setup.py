@@ -18,21 +18,7 @@ import sys
 from pathlib import Path
 
 
-# ─── Path resolution ─────────────────────────────────────────────────────────
-
-def find_workspace() -> Path:
-    env = os.environ.get("OPENCLAW_WORKSPACE")
-    if env:
-        return Path(env)
-    base = Path.home() / ".openclaw"
-    candidates = [p for p in base.iterdir() if p.is_dir() and p.name.startswith("workspace")]
-    if candidates:
-        return sorted(candidates)[0]
-    # Prompt user to create one
-    default = base / "workspace"
-    print(f"  No workspace found. Creating default at {default}")
-    default.mkdir(parents=True, exist_ok=True)
-    return default
+from util import find_workspace
 
 
 SKILL_DIR = Path(__file__).parent.parent

@@ -30,17 +30,7 @@ from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.ticker as ticker
 
 
-# ─── Path resolution ─────────────────────────────────────────────────────────
-
-def find_workspace() -> Path:
-    env = os.environ.get("OPENCLAW_WORKSPACE")
-    if env:
-        return Path(env)
-    base = Path.home() / ".openclaw"
-    candidates = [p for p in base.iterdir() if p.is_dir() and p.name.startswith("workspace")]
-    if candidates:
-        return sorted(candidates)[0]
-    return base / "workspace"
+from util import find_workspace
 
 
 WORKSPACE   = find_workspace()
@@ -84,18 +74,11 @@ CATEGORY_LABELS = {
     'learning':      'Learning',
     'creative':      'Creative',
     'personal':      'Personal',
-    'health':        'Health/Sport',
-    'health/sport':  'Health/Sport',
+    'health':         'Health/Sport',
     'social':        'Social',
     'config':        'Config',
     'side-projects': 'Side-projects',
 }
-
-# ─── Category aliases ─────────────────────────────────────────────────────────
-CATEGORY_ALIASES = {'health': 'health/sport'}
-
-def _normalize_cat(cat: str) -> str:
-    return CATEGORY_ALIASES.get(cat, cat)
 
 # ─── Data loading ─────────────────────────────────────────────────────────────
 
@@ -115,7 +98,7 @@ def load_day(d: date) -> list[dict]:
                 'tz': 'local',
                 'topic': b.get('topic', b.get('snippet', 'unknown')),
                 'subcategory': b.get('subcategory', b.get('topic', 'unknown')),
-                'category': _normalize_cat(b.get('category', 'personal')),
+                'category': b.get('category', 'personal'),
                 'duration_est_min': b.get('attention_minutes', b.get('active_minutes', b.get('span_minutes', 0))),
                 'value': b.get('value', 5),
             }
@@ -453,23 +436,6 @@ def chart_topic_highlights(rows, week_start: date):
 
 # ─── Chart 4: Topic Value Scores ─────────────────────────────────────────────
 
-CATEGORY_VALUE_DEFAULTS = {
-    'work': 7, 'learning': 8, 'creative': 7, 'finance': 6,
-    'personal': 5, 'health': 6, 'side-projects': 6, 'config': 4, 'social': 5,
-}
-OUTCOME_KEYWORDS = ['submitted', 'created', 'built', 'sent', 'delivered', 'completed', 'fixed']
-
-
-def estimate_topic_value(topic: str, category: str, total_mins: float) -> int:
-    base = CATEGORY_VALUE_DEFAULTS.get(category, 5)
-    low = topic.lower()
-    if any(kw in low for kw in OUTCOME_KEYWORDS):
-        base += 1
-    if total_mins > 60:
-        base += 1
-    return min(base, 10)
-
-
 def chart_value_scores(rows, week_start: date):
     th = defaultdict(lambda: {'hours': 0.0, 'mins': 0.0, 'category': 'personal', 'values': []})
     for r in rows:
@@ -485,10 +451,7 @@ def chart_value_scores(rows, week_start: date):
 
     topic_data = []
     for name, info in th.items():
-        if info['values']:
-            v = round(sum(info['values']) / len(info['values']))
-        else:
-            v = estimate_topic_value(name, info['category'], info['mins'])
+        v = round(sum(info['values']) / len(info['values']))
         topic_data.append({'name': name, 'hours': info['hours'], 'value': v, 'category': info['category']})
 
     topic_data.sort(key=lambda x: x['hours'], reverse=True)
