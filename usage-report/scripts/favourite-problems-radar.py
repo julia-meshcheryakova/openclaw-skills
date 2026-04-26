@@ -118,7 +118,7 @@ def main():
     ax.set_facecolor('#161625')
 
     ax.plot(angles, values, 'o-', linewidth=2.5, color='#00d4aa',
-            label=f'Actual ({round(total_minutes/60, 1)}h)', markersize=8)
+            label=f'Actual ({len(seen_dates)} days)', markersize=8)
     ax.fill(angles, values, alpha=0.15, color='#00d4aa')
     ax.plot(angles, ideal, 'o--', linewidth=1.5, color='#e94560',
             label='Balanced target', markersize=6, alpha=0.7)
