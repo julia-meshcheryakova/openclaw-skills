@@ -8,6 +8,17 @@ A collection of community skills for [OpenClaw](https://github.com/openclaw/open
 |-------|-------------|
 | [usage-report](usage-report/) | Weekly usage reports with charts from OpenClaw session logs. Tracks time across categories with LLM-powered topic labeling. |
 
+## Screenshots
+
+### Daily Usage (All Time)
+![Daily Usage](usage-report/screenshots/daily-usage.jpg)
+
+### Category Trends — Weekly Hours
+![Category Trends](usage-report/screenshots/category-trends.jpg)
+
+### Weekly Breakdown
+![Weekly Breakdown](usage-report/screenshots/weekly-breakdown.jpg)
+
 ## Installation
 
 Copy a skill directory into your OpenClaw skills folder:
